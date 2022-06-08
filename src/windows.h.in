@@ -1,0 +1,444 @@
+#ifndef WINDOWS
+#define WINDOWS
+
+#include <string>
+#include <pthread.h>
+using namespace std;
+
+void msg_process();
+
+struct dlnode_t {
+    struct dlnode_t *next;
+    struct dlnode_t *prev;
+    unsigned long seqno;
+
+    dlnode_t () {
+        next = NULL;
+        prev = NULL;
+        seqno = 0;
+    };
+};
+
+struct dllist_t {
+    pthread_mutex_t mutex;
+    unsigned long seqno;
+    unsigned long count;
+    dlnode_t *head;
+    dlnode_t *tail;
+    dllist_t() {
+        pthread_mutex_init(&mutex, 0);
+        seqno = 0;
+        count = 0;
+        head = 0;
+        tail = 0;
+    };
+
+    void dl_bring_first(dlnode_t *node) {
+        pthread_mutex_lock(&this->mutex);
+        if (!head || head == node) {
+            pthread_mutex_unlock(&this->mutex);
+            return;
+        }
+        node->prev->next = node->next;
+        if (node->next) node->next->prev = node->prev;
+        else tail = node->prev;
+        node->next = head;
+        head->prev = node;
+        node->prev = NULL;
+        head = node;
+        pthread_mutex_unlock(&this->mutex);
+    };
+    void dl_apppend_node(dlnode_t *node)
+    {
+        pthread_mutex_lock(&this->mutex);
+        if (this->head && this->tail) {
+            node->next = NULL;
+            node->prev = this->tail;
+            this->tail->next = node;
+            this->tail = node;
+        } else {
+            node->next = NULL;
+            node->prev = NULL;
+            this->head = node;
+            this->tail = node;
+        }
+        this->seqno++;
+        if (this->seqno == 0) this->seqno++;/* 0 is defined as invalid */
+        node->seqno = this->seqno;
+        count++;
+        pthread_mutex_unlock(&this->mutex);
+    };
+
+    void dl_insert_node(dlnode_t *prev, dlnode_t *node)
+    {
+        pthread_mutex_lock(&this->mutex);
+        if (this->head == NULL && this->tail == NULL) {
+            this->head = node;
+            this->tail = node;
+            node->prev = NULL;
+            node->next = NULL;
+        } else {
+            if (prev == NULL) {
+                node->next = this->head;
+                this->head->prev = node;
+                this->head = node;
+                node->prev = NULL;
+            } else {
+                if (prev->next) {
+                    prev->next->prev = node;
+                } else {
+                    this->tail = node;
+                }
+                node->next = prev->next;
+                prev->next = node;
+                node->prev = prev;
+            }
+        }
+
+        this->seqno++;
+        if (this->seqno == 0) this->seqno++;/* 0 is defined as invalid */
+        node->seqno = this->seqno;
+        count++;
+        pthread_mutex_unlock(&this->mutex);
+    };
+
+    int dl_del_node(dlnode_t *node)
+    {
+        pthread_mutex_lock(&this->mutex);
+        if (node->prev) {
+            node->prev->next = node->next;
+        } else if (!node->next && this->head != node) {
+            pthread_mutex_unlock(&this->mutex);
+            return -1; 
+        } else {
+            this->head = node->next;
+        }
+
+        if (node->next) {
+            node->next->prev = node->prev;
+        } else {
+            this->tail = node->prev;
+        }
+        node->prev = NULL;
+        node->next = NULL;
+        count--;
+        pthread_mutex_unlock(&this->mutex);
+        return 0;
+    };
+
+    dlnode_t *dl_first_node()
+    {
+        dlnode_t *p = this->head;
+        return p;
+    };
+
+    dlnode_t *dl_get_node()
+    {
+        dlnode_t *node;
+        pthread_mutex_lock(&this->mutex);
+        node = this->head;
+        if (!node) {
+            pthread_mutex_unlock(&this->mutex);
+            return NULL;
+        }
+        if (node->prev) {
+            node->prev->next = node->next;
+        } else {
+            this->head = node->next;
+        }
+
+        if (node->next) {
+            node->next->prev = node->prev;
+        } else {
+            this->tail = node->prev;
+        }
+        node->prev = NULL;
+        node->next = NULL;
+        count--;
+        pthread_mutex_unlock(&this->mutex);
+        return node;
+    };
+};
+
+#define KEY_ESC 0x1b 
+#define KEY_F1 0x5b31317e
+#define KEY_F2 0x5b31327e
+#define KEY_F3 0x5b31337e
+#define KEY_F4 0x5b31347e
+#define KEY_F5 0x5b31357e
+#define KEY_F6 0x5b31377e 
+#define KEY_F7 0x5b31387e 
+#define KEY_F8 0x5b31397e 
+#define KEY_F9 0x5b32307e 
+#define KEY_F10 0x5b32317e 
+#define KEY_F11 0x5b32337e 
+#define KEY_F12 0x5b32347e 
+#define KEY_HOME 0x5b317e 
+#define KEY_END 0x5b347e 
+#define KEY_PGUP 0x5b357e 
+#define KEY_PGDN 0x5b367e 
+#define KEY_INSERT 0x5b327e 
+#define KEY_DEL 0x7f 
+#define KEY_UP 0x5b41 
+#define KEY_DOWN 0x5b42 
+#define KEY_LEFT 0x5b44 
+#define KEY_RIGHT 0x5b43
+#define KEY_BS 0x8
+#define KEY_ENTER 0xa
+
+#define MOUSE_SHIFT 0x4
+#define MOUSE_ALT 0x08
+#define MOUSE_CTRL 0x10
+
+#define MOUSE_LEFT 0
+#define MOUSE_MID 1
+#define MOUSE_RIGHT 2
+
+#define WHEEL_UP 0x0
+#define WHEEL_DOWN 0x1
+
+typedef enum {
+    WIN_STYLE_NONE  = 0,
+    WIN_STYLE_SIZEABLE,
+    WIN_STYLE_PANNEL
+} win_style_t;
+
+typedef enum {
+    COLOR_BLACK = 30,
+    COLOR_RED = 31,
+    COLOR_GREEN = 32,
+    COLOR_YELLOW = 33,
+    COLOR_BLUE = 34,
+    COLOR_PURPPLE = 35,
+    COLOR_DARK_GREEN = 36,
+    COLOR_WHITE = 37,
+} color_t;
+
+typedef enum {
+    BGCOLOR_BLACK = 40,
+    BGCOLOR_RED = 41,
+    BGCOLOR_GREEN = 42,
+    BGCOLOR_YELLOW = 43,
+    BGCOLOR_BLUE = 44,
+    BGCOLOR_PURPPLE = 45,
+    BGCOLOR_DARK_GREEN = 46,
+    BGCOLOR_WHITE = 47,
+} bgcolor_t;
+
+struct pixel_t { 
+    color_t color;
+    bgcolor_t bgcolor;
+    bool bold;
+    u_int32_t v;
+    pixel_t() {
+        color = COLOR_WHITE;
+        bgcolor = BGCOLOR_BLACK;
+        bold = 0;v = ' ';
+    };
+    bool operator==(pixel_t pixel) {
+        if (color != pixel.color) return false;
+        if (bgcolor != pixel.bgcolor) return false;
+        if (bold != pixel.bold) return false;
+        if (v != pixel.v) return false;
+        return true;
+    };
+    bool operator!=(pixel_t pixel) {
+        if (color != pixel.color) return true;
+        if (bgcolor != pixel.bgcolor) return true;
+        if (bold != pixel.bold) return true;
+        if (v != pixel.v) return true;
+        return false;
+    };
+};
+
+typedef enum {
+    DRAG_NONE,
+    DRAG_POS,
+    DRAG_SIZE_TOP,
+    DRAG_SIZE_LEFT,
+    DRAG_SIZE_BOTTOM,
+    DRAG_SIZE_RIGHT,
+    DRAG_SIZE_TOP_LEFT,
+    DRAG_SIZE_TOP_RIGHT,
+    DRAG_SIZE_BOTTOM_LEFT,
+    DRAG_SIZE_BOTTOM_RIGHT
+} drag_type_t;
+
+typedef enum {
+    ALIGN_NONE,
+    ALIGN_CLIENT,
+    ALIGN_LEFT,
+    ALIGN_TOP,
+    ALIGN_RIGHT,
+    ALIGN_BOTTOM,
+} alignment_t;
+
+class window_t;
+class msg_handler_t : public dlnode_t {
+    window_t *sender;
+
+};
+
+class window_t : public dlnode_t{
+    friend void sig_resize( int signo );
+    friend void msg_process();
+    friend void window_refresh(window_t *win);
+    friend void *app_thread(void *arg);
+    friend class screen_t;
+
+    public:
+        window_t *dupwin;
+        pid_t pid;
+        int pipe_write;
+        window_t *desk;
+        struct clientrect_t {
+            int left;
+            int top;
+            int width;
+            int height;
+        } clientrect;
+    private:
+        window_t *parent;
+        dllist_t child;
+        window_t *actived_child;
+        window_t *focused_win;
+        window_t *mouse_win;
+        bool actived;
+        bool focused;
+        bool can_focuse;
+        alignment_t align;
+        int left;
+        int top;
+        int width;
+        int height;
+        int m_ox, m_oy;
+        bool top_most;
+                
+        pixel_t *pixels, *old_pixels;
+        win_style_t style;
+        drag_type_t drag_type;
+        string text;
+
+        void on_inner_keybd_event(int key);
+        void on_inner_paint();
+        void on_inner_mouse_up(int key, int x, int y);
+        void on_inner_mouse_down(int key, int x, int y, u_int8_t ctrl);
+        void on_inner_mouse_drag(int key, int x, int y, u_int8_t ctrl);
+        void on_inner_mouse_wheel(int key, int x, int y, u_int8_t ctrl);
+    protected:
+        pixel_t *get_pixel_ptr(int x, int y);
+
+    public:
+        window_t(window_t *parent);
+        ~window_t();
+    public:
+        bool in_clientrect(int x, int y);
+        void set_parent(window_t *parent);
+        window_t *get_parent() const;
+        void set_size(int width, int height);
+        int get_left();
+        int get_top();
+        int get_width();
+        int get_height();
+        bool is_focused();
+        bool is_can_focuse();
+        void set_can_focuse();
+        void set_focuded();
+        void set_pos(int left, int top);
+        bool is_top_most();
+        void set_top_most(bool top_most);
+        window_t *get_focused_win();
+        window_t *top_win();
+        void get_screen_pos(int &x, int &y);
+        pixel_t get_pixel(int x, int y);
+        void set_pixel(int x, int y, color_t color, bgcolor_t bgcolor, bool bold, u_int32_t v);
+        void set_style(win_style_t style);
+        win_style_t get_style();
+        void set_text(string text);
+        string get_text();
+        window_t *get_win_on_pos(int x, int y);
+        void set_actived(bool actived);
+        void set_alignment(alignment_t align);
+        alignment_t get_alignment();
+        void draw_vertical_line(int x, int y_begin, int y_end, color_t color = COLOR_WHITE, bgcolor_t bgcolor = BGCOLOR_BLACK);
+        void draw_horizontal_line(int x_begin, int x_end, int y, color_t color = COLOR_WHITE, bgcolor_t bgcolor = BGCOLOR_BLACK);
+        void draw_lefttop_angle(int x, int y, color_t color = COLOR_WHITE, bgcolor_t bgcolor = BGCOLOR_BLACK);
+        void draw_rightttop_angle(int x, int y, color_t color = COLOR_WHITE, bgcolor_t bgcolor = BGCOLOR_BLACK);
+        void draw_leftbottom_angle(int x, int y, color_t color = COLOR_WHITE, bgcolor_t bgcolor = BGCOLOR_BLACK);
+        void draw_righttbottom_angle(int x, int y, color_t color = COLOR_WHITE, bgcolor_t bgcolor = BGCOLOR_BLACK);
+        void draw_cross(int x, int y, color_t color = COLOR_WHITE, bgcolor_t bgcolor = BGCOLOR_BLACK);
+        void draw_left_edge(int x, int y, color_t color = COLOR_WHITE, bgcolor_t bgcolor = BGCOLOR_BLACK);
+        void draw_right_edge(int x, int y, color_t color = COLOR_WHITE, bgcolor_t bgcolor = BGCOLOR_BLACK);
+        void draw_top_edge(int x, int y, color_t color = COLOR_WHITE, bgcolor_t bgcolor = BGCOLOR_BLACK);
+        void draw_bottom_edge(int x, int y, color_t color = COLOR_WHITE, bgcolor_t bgcolor = BGCOLOR_BLACK);
+        void printf(int x, int y, color_t color, bgcolor_t bgcolor, bool bold, char *fmt,...);
+        void refresh();
+
+    public:
+        bool virtual get_focus_pos(int &x, int &y);
+        void virtual on_keybd_event(int key){};
+        void virtual on_paint(){};
+        void virtual on_mouse_up(int key, int x, int y){};
+        void virtual on_mouse_down(int key, int x, int y, u_int8_t ctrl){};
+        void virtual on_mouse_drag(int key, int x, int y, u_int8_t ctrl){};
+        void virtual on_mouse_wheel(int key, int x, int y, u_int8_t ctrl){};
+        void virtual on_resize(int width, int height){};
+};
+
+class button_t : public window_t{
+    public:
+        button_t(window_t *parent);
+        void set_on_click(void (window_t::*on_click)(window_t *));
+    private:
+        bool mouse_down;
+        void (window_t::*on_click)(window_t *);
+    private:
+        void on_paint();
+        void on_mouse_down(int key, int x, int y, u_int8_t ctrl);
+        void on_mouse_up(int key, int x, int y);
+        void on_mouse_drag(int key, int x, int y, u_int8_t ctrl);
+};
+
+class track_v_t: public window_t{
+    private:
+        int len;
+        int pos;
+        void on_paint();
+        void on_mouse_down(int key, int x, int y, u_int8_t ctrl);
+        void on_mouse_drag(int key, int x, int y, u_int8_t ctrl);
+    public:
+        int getlen();
+        void setlen(int len);
+        int getpos();
+        void setpos(int pos);
+    public:
+        track_v_t(window_t *parent);
+};
+
+class text_t: public window_t{
+//        track_v_t track_v;
+    public:
+        text_t(window_t *parent);
+        ~text_t();
+        
+    private:
+        int ins_row;
+        int ins_pos;
+        int column_start;
+        int row_start;
+        int sel_c_begin;
+        int sel_c_end;
+        int sel_r_begin;
+        int sel_r_end;
+        dllist_t rowlist;
+
+    private:
+        void on_paint();
+        void on_keybd_event(int key);
+        void on_mouse_down(int key, int x, int y, u_int8_t ctrl);
+        void on_mouse_drag(int key, int x, int y, u_int8_t ctrl);
+        bool get_focus_pos(int &x, int &y);
+};
+
+
+#endif
